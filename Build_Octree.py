@@ -9,6 +9,20 @@ import utilityFunctions as uf
 from collections import defaultdict
 from Octree_to_Minecraft import Octree
 
+class Node():
+    # Node for A* algorithm
+    def __init__(self, parent=None, position=None):
+        self.parent = parent
+        self.position = position # positions = (x, z, y)
+
+        self.g = 0 # h = heuristic
+        self.h = 0 # g = cost from start to node
+        self.f = 0 # f = g + h
+
+    def __eq__(self, other):
+        # compare x and z positions (ignoring the y position)
+        return (self.position[0] == other.position[0]) and (self.position[1] == other.position[1])
+
 #  Generate height map
 NONSURFACE = [ 0, 17, 18, 31, 37, 38, 78, 175 ]
 def createHeightMap (level, box):
@@ -32,18 +46,72 @@ def scoring(pnt_a, pnt_b, settlement_a, settlement_b, height_map):
     # TODO algo for scoring a line
     # Check y-disance
     # mountain = bad; points close to settlement or not?; length of bridge; height of hole bridge goes through
+    pass
 
 def findLines(box, settlement_a, settlement_b):
     # TODO find random lines around settlement_a center and settlement_b center
+    pass
 
-def pathSearch(height_map, settlement_a, settlement_b):
-    score = [] # Size = [height_map_x-1, height_map_z-1]
-    # TODO
-    # A star to find path 
-    # Create scoring matrix for in between blocks
-    # dips + mountains = same cost
-    # Avoid dips and mountains as much as possible
-    # Once I find path, run through path to find birdges I can build
+def pathSearch(box, height_map, pnt_a, pnt_b):
+    # positions = (x, z, y)
+
+    start_node = Node(None, pnt_a)
+    start_node.g = start_node.h = start_node.f = 0
+    end_node = Node(None, pnt_b)
+    end_node.g = end_node.h = end_node.f = 0    
+
+    open_list = []
+    closed_list = []
+
+    open_list.append(start_node)
+
+    while len(open_list) > 0:
+
+        # Find node with smallest f value in open_list (this will be our next node to view)
+        current_node = open_list[0]
+        current_index = 0
+        for index, item in enumerate(open_list):
+            if item.f < current_node.f:
+                current_node = item
+                current_index = index
+        open_list.pop(current_index)
+        closed_list.append(current_node)
+
+        if current_node == end_node:
+            path = []
+            current = current_node
+            while current is not None:
+                path.append(current.position)
+                current = current.parent
+            return path[::-1] # Reverse path, then return
+
+        children = []
+        for new_position in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            
+            node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1], current_node.position[2])
+
+            if node_position[0] > box.maxx or node_position[0] < box.minx or node_position[1] > box.maxz or node_position[1] < box.minz:
+                continue
+        
+            new_node = Node(current_node, node_position)
+
+            children.append(new_node)
+
+        for child in children:
+            for closed_child in closed_list:
+                if child == closed_child:
+                    continue
+
+            child.g = current_node.g + abs(current_node.position[2] - child.position[2])
+            child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
+            child.f = child.g + child.h
+
+            for open_node in open_list:
+                if child == open_node and child.g > open_node.g:
+                    continue
+            
+            open_list.append(child)
+
 
 def findSuitableLocations(box, height_map, settlement_a, settlement_b):
     # Generate line between settlements (outputs (x,z,y))
@@ -62,7 +130,7 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
     for point in line:
         # if the y distance from old point to new point >3 then slope is going upwards [deals with mountatains]
         # no_saved_bridge_point boolean means that there is no potential bridge that can be constructed (this is for detecting that the y-coordinate has already dipped down/going up from a low point)
-        if tmp_pnt[2] - point[2] >= 3 and no_saved_bridge_point:
+        if point[2] - tmp_pnt[2] >= 3 and no_saved_bridge_point:
             tmp_pnt = point
         
         # if the y distance between points is <3 (once it is less than 3, then the old point and the new point should have roughly the same y coordinate)
@@ -91,6 +159,10 @@ def perform(level, box, options):
     
     build_bridge = findSuitableLocations(box, height_map, settlement_a, settlement_b)   
 
+    path = pathSearch(box, height_map, (box.minx, box.minz, height_map[0][0]), (box.maxx, box.maxz, height_map[len(height_map)-1][len(height_map[0])-1]))
+    print('______')
+    print(path)
+    print('______')
     materials = {
         'stone': (1,0),
         'cobblestone': (4,0),
