@@ -23,24 +23,96 @@ class Node():
         # compare x and z positions (ignoring the y position)
         return (self.position[0] == other.position[0]) and (self.position[1] == other.position[1])
 
-#  Generate height map
+#  Generate height map and tree map
+#  Height map shows y-coordinate of highest nonsurface block
+#  Tree map shows 1 if tree (log block or leaf block) is above surface
 NONSURFACE = [ 0, 17, 18, 31, 37, 38, 78, 175 ]
-def createHeightMap (level, box):
+NONSURFACEWTREE = [ 0, 31, 37, 38, 78, 175 ]
+def createMaps(level, box):
     height_map = []
+    tree_map = []
     for x in range(box.minx, box.maxx):
         col = []
+        tree_col = []
         for z in range(box.minz,box.maxz):
             height_here = 0
             y = box.maxy
             while y >= box.miny:
                 y-=1
                 block = level.blockAt(x,y,z)
+                if block not in NONSURFACEWTREE:
+                    height_with_tree = y
                 if block not in NONSURFACE:
                     height_here = y
                     break
+            if height_with_tree > height_here:
+                tree_col.append(1)
+            else:
+                tree_col.append(0)
             col.append(height_here)
         height_map.append(col)
-    return height_map
+        tree_map.append(tree_col)
+    return height_map, tree_map
+
+# TODO: Use clusters to adjust weights depending on how big a cluster is
+def treeCluster(box, tree_map):
+    clusters = []
+    
+    # Parameters (group_size and threshhold)
+    group_size = 7
+    threshhold = 20
+
+    # Create cells using group_size
+    # Cells are formatted as follows: (x, y) where x and y are multiples of group_size
+    # x goes from 0 to (box.maxx - box.minx)//group_size
+    # y goes from 0 to (box.maxz - box.minz)//group_size
+    x_groups = (box.maxx - box.minx)//group_size
+    z_groups = (box.maxz - box.minz)//group_size
+    cells = []
+    for x in range(x_groups):
+        for z in range(z_groups):
+            cells.append((int(x*group_size), int(z*group_size)))
+    
+    visited = set()
+
+    # Used to pick cells
+    counter = 0
+
+    while len(cells) != len(visited):
+        bfs_list = []
+        curr_cluster = []
+
+        # Picking next cell if bfs_list is empty
+        if cells[counter] in visited:
+            counter+=1
+        else:
+            bfs_list.append(cells[counter])
+            counter+=1
+        
+        # BFS checking threshold amount by adding all numbers in cell from tree_map
+        while bfs_list:
+            curr = bfs_list.pop(0)
+            visited.append(curr)
+
+            # Addition portion
+            # Since cells list stores multiples of group_size, we check all points on tree_map from (curr) to (curr) + (group_size,group_size)
+            # Note that this currently ignores all extra points (the largest xs and largest zs that are not in a group)
+            # TODO: fix so these extra points are contained
+            amount = 0
+            for x in range(group_size):
+                for z in range(group_size):
+                    amount+=tree_map[curr[0]+x][curr[1]+z]
+
+            # if amount > threshold, add all neighboring cells to bfs_list if it hasn't been visited and is in cells
+            # Otherwise, ignore cell (just put into visited)
+            if amount > threshhold:
+                curr_cluster.append(curr)
+                cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
+                for cell in cells_to_append:
+                    if (cell in cells) and (cell not in visited):
+                        bfs_list.append(cell)
+        clusters.append(curr_cluster)
+    return clusters
 
 def scoring(pnt_a, pnt_b, settlement_a, settlement_b, height_map):
     # TODO algo for scoring a line
@@ -149,7 +221,7 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
 
 def perform(level, box, options):
 
-    height_map = createHeightMap(level, box)
+    height_map, tree_map = createMaps(level, box)
 
     # Generate sudo settlement midpoints. Generage angle, distance
     settlement_a = (box.minx,box.minz)
