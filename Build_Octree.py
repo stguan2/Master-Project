@@ -23,11 +23,12 @@ class Node():
         # compare x and z positions (ignoring the y position)
         return (self.position[0] == other.position[0]) and (self.position[1] == other.position[1])
 
-#  Generate height map and tree map
-#  Height map shows y-coordinate of highest nonsurface block
-#  Tree map shows 1 if tree (log block or leaf block) is above surface
 NONSURFACE = [ 0, 17, 18, 31, 37, 38, 78, 175 ]
-NONSURFACEWTREE = [ 0, 31, 37, 38, 78, 175 ]
+TREE = [ 17, 18 ]
+
+#  Generate height map and tree map
+#  Height map shows y-coordinate of highest nonsurface block (2D array where the outer shows z and the inner shows x from min to max)
+#  Tree map shows 1 if tree (log block or leaf block) is above surface
 def createMaps(level, box):
     height_map = []
     tree_map = []
@@ -36,16 +37,17 @@ def createMaps(level, box):
         tree_col = []
         for z in range(box.minz,box.maxz):
             height_here = 0
+            tree_found = False
             y = box.maxy
             while y >= box.miny:
                 y-=1
                 block = level.blockAt(x,y,z)
-                if block not in NONSURFACEWTREE:
-                    height_with_tree = y
+                if block in TREE:
+                    tree_found = True
                 if block not in NONSURFACE:
                     height_here = y
                     break
-            if height_with_tree > height_here:
+            if tree_found:
                 tree_col.append(1)
             else:
                 tree_col.append(0)
@@ -59,8 +61,8 @@ def treeCluster(box, tree_map):
     clusters = []
     
     # Parameters (group_size and threshhold)
-    group_size = 7
-    threshhold = 20
+    group_size = 8
+    threshhold = 40
 
     # Create cells using group_size
     # Cells are formatted as follows: (x, y) where x and y are multiples of group_size
@@ -74,7 +76,6 @@ def treeCluster(box, tree_map):
             cells.append((int(x*group_size), int(z*group_size)))
     
     visited = set()
-
     # Used to pick cells
     counter = 0
 
@@ -88,30 +89,32 @@ def treeCluster(box, tree_map):
         else:
             bfs_list.append(cells[counter])
             counter+=1
-        
         # BFS checking threshold amount by adding all numbers in cell from tree_map
         while bfs_list:
             curr = bfs_list.pop(0)
-            visited.append(curr)
+            # Only run algo (checking amount>threshold and adding to cluster) if node not in visited
+            if curr not in visited:
+                visited.add(curr)
 
-            # Addition portion
-            # Since cells list stores multiples of group_size, we check all points on tree_map from (curr) to (curr) + (group_size,group_size)
-            # Note that this currently ignores all extra points (the largest xs and largest zs that are not in a group)
-            # TODO: fix so these extra points are contained
-            amount = 0
-            for x in range(group_size):
-                for z in range(group_size):
-                    amount+=tree_map[curr[0]+x][curr[1]+z]
+                # Addition portion
+                # Since cells list stores multiples of group_size, we check all points on tree_map from (curr) to (curr) + (group_size,group_size)
+                # Note that this currently ignores all extra points (the largest xs and largest zs that are not in a group)
+                # TODO: fix so these extra points are contained
+                amount = 0
+                for x in range(group_size):
+                    for z in range(group_size):
+                        amount+=tree_map[curr[0]+x][curr[1]+z]
 
-            # if amount > threshold, add all neighboring cells to bfs_list if it hasn't been visited and is in cells
-            # Otherwise, ignore cell (just put into visited)
-            if amount > threshhold:
-                curr_cluster.append(curr)
-                cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
-                for cell in cells_to_append:
-                    if (cell in cells) and (cell not in visited):
-                        bfs_list.append(cell)
-        clusters.append(curr_cluster)
+                # if amount > threshold, add all neighboring cells to bfs_list if it is in cells
+                # Otherwise, ignore cell (even if cell is visited, it will get checked at before this point)
+                if amount > threshhold:
+                    curr_cluster.append(curr)
+                    cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
+                    for cell in cells_to_append:
+                        if cell in cells:
+                            bfs_list.append(cell)
+        if curr_cluster:
+            clusters.append(curr_cluster)
     return clusters
 
 def scoring(pnt_a, pnt_b, settlement_a, settlement_b, height_map):
@@ -220,8 +223,13 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
     return build_bridge
 
 def perform(level, box, options):
-
+    print("START HERE")
     height_map, tree_map = createMaps(level, box)
+    clusters = treeCluster(box, tree_map)
+    print(clusters)
+    print()
+    print(height_map)
+    print()
 
     # Generate sudo settlement midpoints. Generage angle, distance
     settlement_a = (box.minx,box.minz)
