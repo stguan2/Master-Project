@@ -32,10 +32,10 @@ TREE = [ 17, 18 ]
 def createMaps(level, box):
     height_map = []
     tree_map = []
-    for x in range(box.minx, box.maxx):
+    for x in xrange(box.minx, box.maxx):
         col = []
         tree_col = []
-        for z in range(box.minz,box.maxz):
+        for z in xrange(box.minz,box.maxz):
             height_here = 0
             tree_found = False
             y = box.maxy
@@ -56,13 +56,12 @@ def createMaps(level, box):
         tree_map.append(tree_col)
     return height_map, tree_map
 
-# TODO: Use clusters to adjust weights depending on how big a cluster is
 def treeCluster(box, tree_map):
     clusters = []
     
-    # Parameters (group_size and threshhold)
+    # Parameters (group_size and threshold)
     group_size = 8
-    threshhold = 40
+    threshold = 45
 
     # Create cells using group_size
     # Cells are formatted as follows: (x, y) where x and y are multiples of group_size
@@ -71,8 +70,8 @@ def treeCluster(box, tree_map):
     x_groups = (box.maxx - box.minx)//group_size
     z_groups = (box.maxz - box.minz)//group_size
     cells = []
-    for x in range(x_groups):
-        for z in range(z_groups):
+    for x in xrange(x_groups):
+        for z in xrange(z_groups):
             cells.append((int(x*group_size), int(z*group_size)))
     
     visited = set()
@@ -101,13 +100,13 @@ def treeCluster(box, tree_map):
                 # Note that this currently ignores all extra points (the largest xs and largest zs that are not in a group)
                 # TODO: fix so these extra points are contained
                 amount = 0
-                for x in range(group_size):
-                    for z in range(group_size):
+                for x in xrange(group_size):
+                    for z in xrange(group_size):
                         amount+=tree_map[curr[0]+x][curr[1]+z]
 
                 # if amount > threshold, add all neighboring cells to bfs_list if it is in cells
                 # Otherwise, ignore cell (even if cell is visited, it will get checked at before this point)
-                if amount > threshhold:
+                if amount > threshold:
                     curr_cluster.append(curr)
                     cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
                     for cell in cells_to_append:
@@ -115,19 +114,19 @@ def treeCluster(box, tree_map):
                             bfs_list.append(cell)
         if curr_cluster:
             clusters.append(curr_cluster)
-    return clusters
 
-def scoring(pnt_a, pnt_b, settlement_a, settlement_b, height_map):
-    # TODO algo for scoring a line
-    # Check y-disance
-    # mountain = bad; points close to settlement or not?; length of bridge; height of hole bridge goes through
-    pass
+    cluster_matrix_score = [[0 for i in xrange(len(tree_map[0]))] for j in xrange(len(tree_map))]
+    for cluster in clusters:
+        score = len(cluster)
+        for point in cluster:
+            for row in xrange(group_size):
+                for col in xrange(group_size):
+                    cluster_matrix_score[point[0]+row][point[1]+col] = score
+    
+    print(clusters)
+    return cluster_matrix_score
 
-def findLines(box, settlement_a, settlement_b):
-    # TODO find random lines around settlement_a center and settlement_b center
-    pass
-
-def pathSearch(box, height_map, pnt_a, pnt_b):
+def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
     # positions = (x, z, y)
 
     start_node = Node(None, pnt_a)
@@ -135,6 +134,8 @@ def pathSearch(box, height_map, pnt_a, pnt_b):
     end_node = Node(None, pnt_b)
     end_node.g = end_node.h = end_node.f = 0    
 
+    print(pnt_a[0])
+    print(pnt_b[0])
     open_list = []
     closed_list = []
 
@@ -163,11 +164,12 @@ def pathSearch(box, height_map, pnt_a, pnt_b):
         children = []
         for new_position in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
             
-            node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1], current_node.position[2])
-
-            if node_position[0] > box.maxx or node_position[0] < box.minx or node_position[1] > box.maxz or node_position[1] < box.minz:
+            if (current_node.position[0] + new_position[0]) >= box.maxx or (current_node.position[0] + new_position[0]) < box.minx or (current_node.position[1] + new_position[1]) >= box.maxz or (current_node.position[1] + new_position[1]) < box.minz:
                 continue
-        
+
+            node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1],
+            height_map[current_node.position[0] - box.minx + new_position[0]][current_node.position[1] - box.minz + new_position[1]])
+            
             new_node = Node(current_node, node_position)
 
             children.append(new_node)
@@ -176,8 +178,10 @@ def pathSearch(box, height_map, pnt_a, pnt_b):
             for closed_child in closed_list:
                 if child == closed_child:
                     continue
-
-            child.g = current_node.g + abs(current_node.position[2] - child.position[2])
+                
+            # g = current node's g + square difference of y value between child and parent node (with 0/1 height difference = 0 points) + tree density cluster size
+            y = abs(current_node.position[2] - child.position[2])
+            child.g = current_node.g + max(0, y-1)**2 + cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz]
             child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
             child.f = child.g + child.h
 
@@ -193,7 +197,7 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
     m = float(settlement_b[1]-settlement_a[1])/(settlement_b[0]-settlement_a[0])
     b = settlement_b[1]-m*settlement_b[0]
     line = []
-    for x in range(settlement_a[0],settlement_b[0]):
+    for x in xrange(settlement_a[0],settlement_b[0]):
         z = m*x+b
         y = height_map[x-settlement_a[0]][int(z-settlement_a[1])]
         line.append((x,int(z), y))
@@ -225,21 +229,18 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
 def perform(level, box, options):
     print("START HERE")
     height_map, tree_map = createMaps(level, box)
-    clusters = treeCluster(box, tree_map)
-    print(clusters)
-    print()
-    print(height_map)
-    print()
+    cluster_matrix_score = treeCluster(box, tree_map)
+    print('h', len(height_map))
 
     # Generate sudo settlement midpoints. Generage angle, distance
-    settlement_a = (box.minx,box.minz)
-    settlement_b = (box.maxx,box.maxz)
+    settlement_a = (box.minx, box.minz, height_map[0][0])
+    settlement_b = (box.maxx-1, box.maxz-1, height_map[len(height_map)-1][len(height_map[0])-1])
     dist = sqrt((settlement_b[0] - settlement_a[0])**2 + (settlement_b[1] - settlement_a[1])**2)
     angle = acos((box.maxz-box.minz)/dist)
     
     build_bridge = findSuitableLocations(box, height_map, settlement_a, settlement_b)   
 
-    path = pathSearch(box, height_map, (box.minx, box.minz, height_map[0][0]), (box.maxx, box.maxz, height_map[len(height_map)-1][len(height_map[0])-1]))
+    path = pathSearch(box, height_map, cluster_matrix_score, settlement_a, settlement_b)
     print('______')
     print(path)
     print('______')
