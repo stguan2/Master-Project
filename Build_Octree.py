@@ -26,6 +26,7 @@ class Node():
 NONSURFACE = [ 0, 17, 18, 31, 37, 38, 78, 175 ]
 TREE = [ 17, 18 ]
 
+
 #  Generate height map and tree map
 #  Height map shows y-coordinate of highest nonsurface block (2D array where the outer shows z and the inner shows x from min to max)
 #  Tree map shows 1 if tree (log block or leaf block) is above surface
@@ -55,6 +56,7 @@ def createMaps(level, box):
         height_map.append(col)
         tree_map.append(tree_col)
     return height_map, tree_map
+
 
 def treeCluster(box, tree_map):
     clusters = []
@@ -126,6 +128,7 @@ def treeCluster(box, tree_map):
     print(clusters)
     return cluster_matrix_score
 
+
 def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
     # positions = (x, z, y)
 
@@ -142,7 +145,6 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
     open_list.append(start_node)
 
     while len(open_list) > 0:
-
         # Find node with smallest f value in open_list (this will be our next node to view)
         current_node = open_list[0]
         current_index = 0
@@ -192,21 +194,13 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
             open_list.append(child)
 
 
-def findSuitableLocations(box, height_map, settlement_a, settlement_b):
-    # Generate line between settlements (outputs (x,z,y))
-    m = float(settlement_b[1]-settlement_a[1])/(settlement_b[0]-settlement_a[0])
-    b = settlement_b[1]-m*settlement_b[0]
-    line = []
-    for x in xrange(settlement_a[0],settlement_b[0]):
-        z = m*x+b
-        y = height_map[x-settlement_a[0]][int(z-settlement_a[1])]
-        line.append((x,int(z), y))
-    
+def findSuitableLocations(box, height_map, path): 
     # Find suitable places to build bridge given line
-    tmp_pnt = line[0]
+    tmp_pnt = path[0]
     build_bridge = []
     no_saved_bridge_point = True
-    for point in line:
+
+    for point in path:
         # if the y distance from old point to new point >3 then slope is going upwards [deals with mountatains]
         # no_saved_bridge_point boolean means that there is no potential bridge that can be constructed (this is for detecting that the y-coordinate has already dipped down/going up from a low point)
         if point[2] - tmp_pnt[2] >= 3 and no_saved_bridge_point:
@@ -226,23 +220,28 @@ def findSuitableLocations(box, height_map, settlement_a, settlement_b):
                 tmp_pnt = point
     return build_bridge
 
+
 def perform(level, box, options):
     print("START HERE")
     height_map, tree_map = createMaps(level, box)
     cluster_matrix_score = treeCluster(box, tree_map)
     print('h', len(height_map))
 
-    # Generate sudo settlement midpoints. Generage angle, distance
+    # Generate sudo settlement center points.
     settlement_a = (box.minx, box.minz, height_map[0][0])
     settlement_b = (box.maxx-1, box.maxz-1, height_map[len(height_map)-1][len(height_map[0])-1])
-    dist = sqrt((settlement_b[0] - settlement_a[0])**2 + (settlement_b[1] - settlement_a[1])**2)
-    angle = acos((box.maxz-box.minz)/dist)
-    
-    build_bridge = findSuitableLocations(box, height_map, settlement_a, settlement_b)   
 
+    # Generate path and best places to build bridge.
     path = pathSearch(box, height_map, cluster_matrix_score, settlement_a, settlement_b)
+
     print('______')
     print(path)
+    print('______')
+
+    build_bridge = findSuitableLocations(box, height_map, path)
+
+    print('______')
+    print(build_bridge)
     print('______')
     materials = {
         'stone': (1,0),
@@ -258,6 +257,7 @@ def perform(level, box, options):
         second_pnt = bridge[1]
         mid_pnt = ((first_pnt[0] + second_pnt[0])/2, (first_pnt[1] + second_pnt[1])/2, max(first_pnt[2],second_pnt[2]))
         scale = sqrt((first_pnt[0] - second_pnt[0])**2 + (first_pnt[1] - second_pnt[1])**2 )
+        angle = acos((second_pnt[0]-first_pnt[0])/scale)
         x_mult = 10
         y_mult = 1
         z_mult = 3
