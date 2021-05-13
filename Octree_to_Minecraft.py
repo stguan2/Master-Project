@@ -20,6 +20,7 @@ class Octree:
         self.height_map = height_map
         self.points = None
         self.all_points = []
+        self.NONSURFACE = [ 0, 9, 17, 18, 31, 37, 38, 78, 175 ]
 
     def rotateZ(self, theta, origin, point):
         point_minus_origin = (point[0]-origin[0], point[1]-origin[1], point[2]-origin[2])
@@ -81,13 +82,12 @@ class Octree:
             x = point[0] - self.box.minx
             z = point[2] - self.box.minz
             y = point[1] - 1
-            while y > self.height_map[x][z]:
+            while self.level.blockAt(x,y,z) in self.NONSURFACE and y > 0:
                 uf.setBlock(self.level, self.materials['cobblestone'],point[0],y,point[2])
                 y-=1
 
-    def findRoad(self):
+    def movePoints(self):
         points_per_y = {}
-        temp_points = []
         for point in self.points:
             if point[1] in points_per_y: 
                 points_per_y[point[1]] += 1
@@ -95,10 +95,17 @@ class Octree:
                 points_per_y[point[1]] = 1
         
         y_mode = max(points_per_y.items(), key=lambda x: x[1])
-        print(y_mode)
-        print(points_per_y)
+        for pos in xrange(len(self.points)):
+            x = self.points[pos][0]
+            y = self.points[pos][1]
+            z = self.points[pos][2]
+            self.points[pos] = ((x, y + self.pos[1] - y_mode[0], z))
+        print('p',self.points)
+
+    def findRoad(self):
+        temp_points = []
         for point in self.points:
-            if point[1] == y_mode[0]:
+            if point[1] == self.pos[1]:
                 temp_points.append(point)
         for point in temp_points:
             uf.setBlock(self.level, self.materials['oak_plank'],point[0],point[1],point[2])
@@ -138,6 +145,7 @@ class Octree:
             self.all_points[pos] = ((new_x, new_y, new_z))
         
         self.removeDuplicatePoints()
+        self.movePoints()
         self.finishSupports()
 
         for point in self.points:

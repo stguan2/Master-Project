@@ -23,8 +23,12 @@ class Node():
         # compare x and z positions (ignoring the y position)
         return (self.position[0] == other.position[0]) and (self.position[1] == other.position[1])
 
-NONSURFACE = [ 0, 17, 18, 31, 37, 38, 78, 175 ]
+    def __repr__(self):
+        return (str(self.position))
+
+NONSURFACE = [ 0, 9, 17, 18, 31, 37, 38, 78, 175 ]
 TREE = [ 17, 18 ]
+WATER = [ 9 ]
 
 
 #  Generate height map and tree map
@@ -33,21 +37,26 @@ TREE = [ 17, 18 ]
 def createMaps(level, box):
     height_map = []
     tree_map = []
-    for x in xrange(box.minx, box.maxx):
+    for x in xrange(box.minx, box.maxx+1):
         col = []
         tree_col = []
-        for z in xrange(box.minz,box.maxz):
+        for z in xrange(box.minz,box.maxz+1):
             height_here = 0
             tree_found = False
+            water = False
             y = box.maxy
             while y >= box.miny:
                 y-=1
                 block = level.blockAt(x,y,z)
                 if block in TREE:
                     tree_found = True
+                if block in WATER:
+                    water = True
                 if block not in NONSURFACE:
                     height_here = y
                     break
+            if water:
+                height_here -= 5
             if tree_found:
                 tree_col.append(1)
             else:
@@ -63,7 +72,7 @@ def treeCluster(box, tree_map):
     
     # Parameters (group_size and threshold)
     group_size = 8
-    threshold = 45
+    threshold = 30
 
     # Create cells using group_size
     # Cells are formatted as follows: (x, y) where x and y are multiples of group_size
@@ -125,7 +134,6 @@ def treeCluster(box, tree_map):
                 for col in xrange(group_size):
                     cluster_matrix_score[point[0]+row][point[1]+col] = score
     
-    print(clusters)
     return cluster_matrix_score
 
 
@@ -173,24 +181,29 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
             height_map[current_node.position[0] - box.minx + new_position[0]][current_node.position[1] - box.minz + new_position[1]])
             
             new_node = Node(current_node, node_position)
-
             children.append(new_node)
 
         for child in children:
+
+            check = False
             for closed_child in closed_list:
                 if child == closed_child:
-                    continue
-                
+                    check = True
+                    break
+            if check:
+                continue
+
             # g = current node's g + square difference of y value between child and parent node (with 0/1 height difference = 0 points) + tree density cluster size
             y = abs(current_node.position[2] - child.position[2])
-            child.g = current_node.g + max(0, y-1)**2 + cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz]
+            child.g = current_node.g + .2 + max(0, y-1)**2 + (cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz])**2
             child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
             child.f = child.g + child.h
-
             for open_node in open_list:
                 if child == open_node and child.g > open_node.g:
-                    continue
-            
+                    check = True
+                    break
+            if check:
+                continue
             open_list.append(child)
 
 
@@ -207,10 +220,10 @@ def findSuitableLocations(box, height_map, path):
             tmp_pnt = point
         
         # if the y distance between points is <3 (once it is less than 3, then the old point and the new point should have roughly the same y coordinate)
-        if abs(point[2] - tmp_pnt[2]) < 3:
+        if abs(point[2] - tmp_pnt[2]) <= 3:
             no_saved_bridge_point = False
             # if the x distance between points is <5
-            if abs(tmp_pnt[0] - point[0]) < 5:
+            if sqrt((tmp_pnt[0] - point[0])**2 + (tmp_pnt[1] - point[1])**2) < 5:
                 tmp_pnt = point
                 no_saved_bridge_point = True
             else:
@@ -225,15 +238,17 @@ def perform(level, box, options):
     print("START HERE")
     height_map, tree_map = createMaps(level, box)
     cluster_matrix_score = treeCluster(box, tree_map)
-    print('h', len(height_map))
-
+    print('h', len(height_map), len(height_map[0]))
+    print('b', box.minx, box.maxx)
     # Generate sudo settlement center points.
-    settlement_a = (box.minx, box.minz, height_map[0][0])
-    settlement_b = (box.maxx-1, box.maxz-1, height_map[len(height_map)-1][len(height_map[0])-1])
+    settlement_a = (box.minx+1, box.minz+1, height_map[1][1])
+    settlement_b = (box.maxx-2, box.maxz-2, height_map[len(height_map)-1][len(height_map[0])-1])
 
     # Generate path and best places to build bridge.
     path = pathSearch(box, height_map, cluster_matrix_score, settlement_a, settlement_b)
-
+    print(tree_map)
+    print("___")
+    print(cluster_matrix_score)
     print('______')
     print(path)
     print('______')
@@ -248,16 +263,19 @@ def perform(level, box, options):
         'cobblestone': (4,0),
         'bottom_slab': (126,0),
         'top_slab': (126,8),
-        'oak_plank': (5,0)
+        'oak_plank': (5,0),
+        'white_wool': (35,0)
     }
+    for i in path:
+        uf.setBlock(level, materials['white_wool'],i[0],i[2],i[1])
 
     # Build bridge given suitable places to build bridge
     for bridge in build_bridge:
         first_pnt = bridge[0]
         second_pnt = bridge[1]
-        mid_pnt = ((first_pnt[0] + second_pnt[0])/2, (first_pnt[1] + second_pnt[1])/2, max(first_pnt[2],second_pnt[2]))
+        mid_pnt = ((first_pnt[0] + second_pnt[0])/2, (first_pnt[1] + second_pnt[1])/2, ((first_pnt[2] + second_pnt[2])/2))
         scale = sqrt((first_pnt[0] - second_pnt[0])**2 + (first_pnt[1] - second_pnt[1])**2 )
-        angle = acos((second_pnt[0]-first_pnt[0])/scale)
+        angle = asin((second_pnt[0]-first_pnt[0])/scale)
         x_mult = 10
         y_mult = 1
         z_mult = 3
