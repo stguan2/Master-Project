@@ -195,11 +195,11 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
 
             # g = current node's g + square difference of y value between child and parent node (with 0/1 height difference = 0 points) + tree density cluster size
             y = abs(current_node.position[2] - child.position[2])
-            child.g = current_node.g + .2 + max(0, y-1)**2 + (cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz])**2
+            child.g = current_node.g + .1 + max(0, y-1)**3 + (cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz])**2
             child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
             child.f = child.g + child.h
             for open_node in open_list:
-                if child == open_node and child.g > open_node.g:
+                if child == open_node and child.g >= open_node.g:
                     check = True
                     break
             if check:
