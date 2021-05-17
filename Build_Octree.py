@@ -31,17 +31,21 @@ TREE = [ 17, 18 ]
 WATER = [ 9 ]
 
 
-#  Generate height map and tree map
+#  Generate height map, height map with water adjusted, and tree map
 #  Height map shows y-coordinate of highest nonsurface block (2D array where the outer shows z and the inner shows x from min to max)
+#  Height map with water adjusted is the same as height map except with -5 y-coordinate if the location is a water block
 #  Tree map shows 1 if tree (log block or leaf block) is above surface
 def createMaps(level, box):
     height_map = []
+    height_map_water = []
     tree_map = []
     for x in xrange(box.minx, box.maxx+1):
         col = []
+        col_water = []
         tree_col = []
         for z in xrange(box.minz,box.maxz+1):
             height_here = 0
+            height_here_water = 0
             tree_found = False
             water = False
             y = box.maxy
@@ -56,15 +60,19 @@ def createMaps(level, box):
                     height_here = y
                     break
             if water:
-                height_here -= 5
+                height_here_water = height_here - 5
+            else:
+                height_here_water = height_here
             if tree_found:
                 tree_col.append(1)
             else:
                 tree_col.append(0)
             col.append(height_here)
+            col_water.append(height_here_water)
         height_map.append(col)
+        height_map_water.append(col)
         tree_map.append(tree_col)
-    return height_map, tree_map
+    return height_map_water, height_map, tree_map
 
 
 def treeCluster(box, tree_map):
@@ -207,10 +215,10 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
             open_list.append(child)
 
 
-def findSuitableLocations(box, height_map, path): 
+def findSuitableLocations(path): 
     # Find suitable places to build bridge given line
     tmp_pnt = path[0]
-    build_bridge = []
+    bridge = []
     no_saved_bridge_point = True
 
     for point in path:
@@ -228,15 +236,41 @@ def findSuitableLocations(box, height_map, path):
                 no_saved_bridge_point = True
             else:
                 # if x distance >5 we build bridge between points
-                build_bridge.append((tmp_pnt, point))
+                bridge.append((tmp_pnt, point))
                 no_saved_bridge_point = True
                 tmp_pnt = point
+    return bridge
+
+
+def scoreBridge(box, height_map, bridges):
+    # TODO change heightmap to not -5 when in water
+    threshold = 5
+    build_bridge = []
+    for b in bridges:
+        max_y = max(height_map[b[0][0],b[0][1]], height_map[b[1][0],b[1][1]])
+        score = 0
+        dist = sqrt((b[1][1] - b[0][1])**2 + (b[1][0] - b[0][0])**2)
+        m = float((b[1][1]-b[0][1])/(b[1][0]-b[0][0]))
+        b = b[1][1]-m*b[1][0]
+        for x in xrange(b[0][0], b[1][0]):
+            if dist <= 5:
+                score = -1
+                break
+            z = m*x+b
+            y = height_map[x-box.minx][int(z-box.minz)]
+            if y > max_y:
+                score = -1
+                break
+            else:
+                score += (y - max_y)**2
+        if score > threshold*dist:
+            build_bridge.append(b)
     return build_bridge
 
 
 def perform(level, box, options):
     print("START HERE")
-    height_map, tree_map = createMaps(level, box)
+    height_map_water_adjusted, height_map, tree_map = createMaps(level, box)
     cluster_matrix_score = treeCluster(box, tree_map)
     print('h', len(height_map), len(height_map[0]))
     print('b', box.minx, box.maxx)
@@ -245,7 +279,7 @@ def perform(level, box, options):
     settlement_b = (box.maxx-2, box.maxz-2, height_map[len(height_map)-1][len(height_map[0])-1])
 
     # Generate path and best places to build bridge.
-    path = pathSearch(box, height_map, cluster_matrix_score, settlement_a, settlement_b)
+    path = pathSearch(box, height_map_water_adjusted, cluster_matrix_score, settlement_a, settlement_b)
     print(tree_map)
     print("___")
     print(cluster_matrix_score)
@@ -253,7 +287,8 @@ def perform(level, box, options):
     print(path)
     print('______')
 
-    build_bridge = findSuitableLocations(box, height_map, path)
+    bridges = findSuitableLocations(path)
+    build_bridge = scoreBridge(box, height_map, bridges)
 
     print('______')
     print(build_bridge)
