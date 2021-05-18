@@ -137,7 +137,7 @@ def treeCluster(box, tree_map):
                     for z in xrange(group_size):
                         amount+=tree_map[curr[0]+x][curr[1]+z]
 
-                # if amount > threshold, split into maller grids and check new amount>threshold/4. Then add all neighboring cells to bfs_list if it is in cells
+                # if amount > threshold, split into smaller grids and check new amount>threshold/4. Then add all neighboring cells to bfs_list if it is in cells
                 # Otherwise, ignore cell (even if cell is visited, it will get checked at before this point)
                 if amount > threshold:
                     points = divideCluster(curr, tree_map, group_size//2, threshold/4)
