@@ -75,12 +75,28 @@ def createMaps(level, box):
     return height_map_water, height_map, tree_map
 
 
+# Divides cluster into four groups
+# Group size = size of the divided clusters
+# Threshold = threshold needed for divided cluster to be returned
+def divideCluster(cluster_point, tree_map, group_size, threshold):
+    points_over_threshold = []
+    grid = [cluster_point,(cluster_point[0]+group_size,cluster_point[1]),(cluster_point[0],cluster_point[1]+group_size),(cluster_point[0]+group_size,cluster_point[1]+group_size)]
+    for point in grid:
+        split_amount = 0
+        for x in xrange(group_size):
+            for z in xrange(group_size):
+                split_amount+=tree_map[point[0]+x][point[1]+z]
+        if split_amount>threshold:
+            points_over_threshold.append(point)
+    return points_over_threshold
+
+
 def treeCluster(box, tree_map):
     clusters = []
     
     # Parameters (group_size and threshold)
     group_size = 8
-    threshold = 30
+    threshold = 32
 
     # Create cells using group_size
     # Cells are formatted as follows: (x, y) where x and y are multiples of group_size
@@ -116,25 +132,18 @@ def treeCluster(box, tree_map):
 
                 # Addition portion
                 # Since cells list stores multiples of group_size, we check all points on tree_map from (curr) to (curr) + (group_size,group_size)
-                # Note that this currently ignores all extra points (the largest xs and largest zs that are not in a group)
-                # TODO: fix so these extra points are contained
                 amount = 0
                 for x in xrange(group_size):
                     for z in xrange(group_size):
                         amount+=tree_map[curr[0]+x][curr[1]+z]
 
-                # if amount > threshold, split into four smaller grids and check new amount>threshold/4. Then add all neighboring cells to bfs_list if it is in cells
+                # if amount > threshold, split into maller grids and check new amount>threshold/4. Then add all neighboring cells to bfs_list if it is in cells
                 # Otherwise, ignore cell (even if cell is visited, it will get checked at before this point)
                 if amount > threshold:
-                    grid = [curr,(curr[0]+group_size//2,curr[1]),(curr[0],curr[1]+group_size//2),(curr[0]+group_size//2,curr[1]+group_size//2)]
-                    split_amount = 0
-                    for point in grid:
-                        for x in xrange(group_size//2):
-                            for z in xrange(group_size//2):
-                                split_amount+=tree_map[point[0]+x][point[1]+z]
-                        if split_amount>threshold//4:
-                            curr_cluster.append(point)
-                    # curr_cluster.append(curr)
+                    points = divideCluster(curr, tree_map, group_size//2, threshold/4)
+                    for p in points:
+                        for c in divideCluster(p, tree_map, group_size//4, threshold/16):
+                            curr_cluster.append(c)
 
                     cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
                     for cell in cells_to_append:
@@ -145,13 +154,11 @@ def treeCluster(box, tree_map):
 
     cluster_matrix_score = [[0 for i in xrange(len(tree_map[0]))] for j in xrange(len(tree_map))]
     for cluster in clusters:
-        score = len(cluster)/4.0
-        # score = len(cluster)
+        score = len(cluster)/16.0
         for point in cluster:
             for row in xrange(group_size//2):
                 for col in xrange(group_size//2):
                     cluster_matrix_score[point[0]+row][point[1]+col] = score
-    print('c',clusters)
     return cluster_matrix_score
 
 
@@ -163,8 +170,6 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
     end_node = Node(None, pnt_b)
     end_node.g = end_node.h = end_node.f = 0    
 
-    print(pnt_a[0])
-    print(pnt_b[0])
     open_list = []
     closed_list = []
 
@@ -279,31 +284,22 @@ def scoreBridge(box, height_map, bridges):
 
 
 def perform(level, box, options):
-    print("START HERE")
+    print("START")
     height_map_water_adjusted, height_map, tree_map = createMaps(level, box)
     cluster_matrix_score = treeCluster(box, tree_map)
-    print('h', len(height_map), len(height_map[0]))
-    print('b', box.minx, box.maxx)
+
     # Generate sudo settlement center points.
     settlement_a = (box.minx+1, box.minz+1, height_map[1][1])
     settlement_b = (box.maxx-2, box.maxz-2, height_map[len(height_map)-1][len(height_map[0])-1])
 
     # Generate path and best places to build bridge.
     path = pathSearch(box, height_map_water_adjusted, cluster_matrix_score, settlement_a, settlement_b)
-    print(tree_map)
-    print("___")
-    print(cluster_matrix_score)
-    print('______')
-    print(path)
-    print('______')
+    print("Path Found")
 
     bridges = findSuitableLocations(path)
     build_bridge = scoreBridge(box, height_map, bridges)
-    
-    print(bridges)
-    print('______')
-    print(build_bridge)
-    print('______')
+    print("Bridge Points Found")
+
     materials = {
         'stone': (1,0),
         'cobblestone': (4,0),
