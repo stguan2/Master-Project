@@ -204,10 +204,10 @@ def pathSearch(box, height_map, cluster_matrix_score, pnt_a, pnt_b):
             # g = current node's g + square difference of y value between child and parent node (with 0/1 height difference = 0 points) + tree density cluster size
             y = abs(current_node.position[2] - child.position[2])
             child.g = current_node.g + .1 + max(0, y-1)**3 + (cluster_matrix_score[child.position[0]-box.minx][child.position[1]-box.minz])**2
-            child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
+            child.h = ((child.position[0] - end_node.position[0])**2) + ((child.position[1] - end_node.position[1])**2)
             child.f = child.g + child.h
             for open_node in open_list:
-                if child == open_node and child.g >= open_node.g:
+                if child == open_node and child.g > open_node.g:
                     check = True
                     break
             if check:
@@ -247,16 +247,16 @@ def scoreBridge(box, height_map, bridges):
     threshold = 5
     build_bridge = []
     for b in bridges:
-        max_y = max(height_map[b[0][0],b[0][1]], height_map[b[1][0],b[1][1]])
+        max_y = max(height_map[b[0][0]-box.minx][b[0][1]-box.minz], height_map[b[1][0]-box.minx][b[1][1]-box.minz])
         score = 0
         dist = sqrt((b[1][1] - b[0][1])**2 + (b[1][0] - b[0][0])**2)
         m = float((b[1][1]-b[0][1])/(b[1][0]-b[0][0]))
-        b = b[1][1]-m*b[1][0]
+        YIntercept = b[1][1]-m*b[1][0]
         for x in xrange(b[0][0], b[1][0]):
             if dist <= 5:
                 score = -1
                 break
-            z = m*x+b
+            z = m*x+YIntercept
             y = height_map[x-box.minx][int(z-box.minz)]
             if y > max_y:
                 score = -1
@@ -289,7 +289,8 @@ def perform(level, box, options):
 
     bridges = findSuitableLocations(path)
     build_bridge = scoreBridge(box, height_map, bridges)
-
+    
+    print(bridges)
     print('______')
     print(build_bridge)
     print('______')
