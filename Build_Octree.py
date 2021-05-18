@@ -123,10 +123,19 @@ def treeCluster(box, tree_map):
                     for z in xrange(group_size):
                         amount+=tree_map[curr[0]+x][curr[1]+z]
 
-                # if amount > threshold, add all neighboring cells to bfs_list if it is in cells
+                # if amount > threshold, split into four smaller grids and check new amount>threshold/4. Then add all neighboring cells to bfs_list if it is in cells
                 # Otherwise, ignore cell (even if cell is visited, it will get checked at before this point)
                 if amount > threshold:
-                    curr_cluster.append(curr)
+                    grid = [curr,(curr[0]+group_size//2,curr[1]),(curr[0],curr[1]+group_size//2),(curr[0]+group_size//2,curr[1]+group_size//2)]
+                    split_amount = 0
+                    for point in grid:
+                        for x in xrange(group_size//2):
+                            for z in xrange(group_size//2):
+                                split_amount+=tree_map[point[0]+x][point[1]+z]
+                        if split_amount>threshold//4:
+                            curr_cluster.append(point)
+                    # curr_cluster.append(curr)
+
                     cells_to_append = [(curr[0] + group_size, curr[1]), (curr[0] - group_size, curr[1]), (curr[0], curr[1] + group_size), (curr[0], curr[1] - group_size)]
                     for cell in cells_to_append:
                         if cell in cells:
@@ -136,12 +145,13 @@ def treeCluster(box, tree_map):
 
     cluster_matrix_score = [[0 for i in xrange(len(tree_map[0]))] for j in xrange(len(tree_map))]
     for cluster in clusters:
-        score = len(cluster)
+        score = len(cluster)/4.0
+        # score = len(cluster)
         for point in cluster:
-            for row in xrange(group_size):
-                for col in xrange(group_size):
+            for row in xrange(group_size//2):
+                for col in xrange(group_size//2):
                     cluster_matrix_score[point[0]+row][point[1]+col] = score
-    
+    print('c',clusters)
     return cluster_matrix_score
 
 
