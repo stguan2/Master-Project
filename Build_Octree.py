@@ -237,14 +237,22 @@ def findSuitableLocations(path):
     no_saved_bridge_point = True
 
     for point in path:
+        # # if the y distance from old point to new point >3 then slope is going upwards [deals with mountatains]
+        # # no_saved_bridge_point boolean means that there is no potential bridge that can be constructed (this is for detecting that the y-coordinate has already dipped down/going up from a low point)
+        if point[2] - tmp_pnt[2] >= 3 and no_saved_bridge_point:
+            tmp_pnt = point
+        
         # if the y distance between points is <3 (once it is less than 3, then the old point and the new point should have roughly the same y coordinate)
         if abs(point[2] - tmp_pnt[2]) <= 3:
+            no_saved_bridge_point = False
             # if the x distance between points is <5
             if sqrt((tmp_pnt[0] - point[0])**2 + (tmp_pnt[1] - point[1])**2) < 5:
                 tmp_pnt = point
+                no_saved_bridge_point = True
             else:
                 # if x distance >5 we build bridge between points
                 bridge.append((tmp_pnt, point))
+                no_saved_bridge_point = True
                 tmp_pnt = point
     return bridge
 
@@ -259,6 +267,9 @@ def scoreBridge(box, height_map, bridges):
         m = float((b[1][1]-b[0][1])/(b[1][0]-b[0][0]))
         YIntercept = b[1][1]-m*b[1][0]
         for x in xrange(b[0][0], b[1][0]):
+            if dist <= 5:
+                score = -1
+                break
             z = m*x+YIntercept
             y = height_map[x-box.minx][int(z-box.minz)]
             if y > max_y:
