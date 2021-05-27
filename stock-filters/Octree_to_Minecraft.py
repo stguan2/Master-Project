@@ -4,7 +4,6 @@ from random import randint, choice
 from pymclevel import alphaMaterials, MCSchematic, MCLevel, BoundingBox
 
 import utilityFunctions as uf
-import SettlementMap as sm
 
 class Octree:
     def __init__(self, level, box, pos, materials, scale, x_mult, y_mult, z_mult, angle, height_map, points_path):
