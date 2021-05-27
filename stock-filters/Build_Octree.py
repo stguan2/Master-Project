@@ -4,7 +4,6 @@ from random import randint
 from pymclevel import alphaMaterials, MCSchematic, MCLevel, BoundingBox
 from mcplatform import *
 
-import SettlementMap as sm
 import utilityFunctions as uf
 from collections import defaultdict
 from Octree_to_Minecraft import Octree
